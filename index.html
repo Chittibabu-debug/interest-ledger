@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}</style>
+<title>Interest Ledger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: a details panel on the left; on the right a ledger-style answer (total, monthly interest, monthly payment) above a month-by-month table. Stacks on phones. */
+:root {
+  --bg: #F1F4F1;
+  --surface: #FFFFFF;
+  --field: #FFFFFF;
+  --fg: #15201C;
+  --muted: #5B6B65;
+  --rule: #D5DDD8;
+  --accent: #0E5A4A;
+  --accent-fg: #FFFFFF;
+  --hi: #E4EFEA;
+  --display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --body: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1513;
+    --surface: #161F1C;
+    --field: #101917;
+    --fg: #E7EFEB;
+    --muted: #93A59D;
+    --rule: #2A3833;
+    --accent: #58C2A5;
+    --accent-fg: #06201A;
+    --hi: #1C2B26;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1513;
+  --surface: #161F1C;
+  --field: #101917;
+  --fg: #E7EFEB;
+  --muted: #93A59D;
+  --rule: #2A3833;
+  --accent: #58C2A5;
+  --accent-fg: #06201A;
+  --hi: #1C2B26;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.5;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 {
+  font-family: var(--display);
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  text-wrap: balance;
+}
+h2 {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  margin: 28px 0 10px;
+  letter-spacing: -0.01em;
+}
+.lede { color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 350px) minmax(0, 1fr);
+  grid-template-areas: "form results" "saved results";
+  grid-template-rows: auto 1fr;
+  gap: 32px;
+  align-items: start;
+}
+#form { grid-area: form; }
+.results { grid-area: results; }
+#savedPanel { grid-area: saved; }
+@media (max-width: 820px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "form" "results" "saved";
+    grid-template-rows: auto;
+  }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.lbl {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+  padding: 0;
+}
+input, select {
+  width: 100%;
+  font: inherit;
+  font-size: 1.05rem;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+input:focus-visible, select:focus-visible, .opt:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.row.rate { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+.hint { font-size: 0.88rem; color: var(--muted); margin: 6px 0 0; }
+.hint strong { color: var(--fg); font-weight: 600; }
+
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.opt {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.opt input { width: auto; padding: 0; margin-top: 5px; accent-color: var(--accent); flex: none; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--hi); }
+.opt b { display: block; font-weight: 600; line-height: 1.3; }
+.opt span { display: block; font-size: 0.86rem; color: var(--muted); margin-top: 2px; }
+
+.results { min-width: 0; }
+.summary { margin: 0 0 10px; color: var(--muted); }
+.hero { padding-bottom: 16px; border-bottom: 2px solid var(--fg); }
+.k {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hero .v {
+  font-size: clamp(2.3rem, 9vw, 3.7rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule);
+}
+@media (max-width: 600px) { .facts { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
+.fact .v {
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fact .n { font-size: 0.86rem; color: var(--muted); }
+
+.tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+table { border-collapse: collapse; width: 100%; min-width: 580px; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: right; white-space: nowrap; }
+th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+thead th {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
+}
+tbody tr + tr td { border-top: 1px solid var(--rule); }
+td.pay { font-weight: 700; color: var(--accent); }
+tfoot td { font-weight: 700; background: var(--hi); border-top: 2px solid var(--fg); }
+.msg {
+  padding: 18px;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.sample { font-size: 0.84rem; color: var(--muted); margin: 0; }
+[hidden] { display: none !important; }
+tr.xr td { background: var(--hi); }
+.gain {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--hi);
+  border-left: 4px solid var(--accent);
+}
+.gain b { color: var(--accent); font-weight: 700; }
+.field-gap { margin-top: 10px; }
+
+.savebox { display: flex; flex-direction: column; gap: 8px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.saverow { display: flex; gap: 8px; }
+.saverow input { flex: 1 1 auto; }
+.status { min-height: 1.3em; font-size: 0.9rem; color: var(--accent); margin: 0; }
+.btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.small { padding: 6px 12px; font-size: 0.92rem; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.armed { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+#savedPanel h2 { margin: 0 0 4px; }
+.saved { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.saved li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+}
+.saved li:first-child { border-top: 0; }
+.saved .info { min-width: 0; flex: 1 1 170px; }
+.saved .info strong { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.saved .info span { display: block; font-size: 0.86rem; color: var(--muted); overflow-wrap: anywhere; }
+.saved .btns { display: flex; gap: 6px; }
+
+.backup { border-top: 1px solid var(--rule); padding-top: 14px; }
+.backup summary { cursor: pointer; font-weight: 600; }
+.backup summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.bk-body { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.bk-body .lbl { margin-bottom: 0; }
+.bk-row { display: flex; flex-wrap: wrap; gap: 8px; }
+textarea {
+  width: 100%;
+  min-width: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--fg);
+  resize: vertical;
+}
+textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type=file] { padding: 8px; font-size: 0.92rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <h1>Interest Ledger</h1>
+  <p class="lede">Enter the amount, the rate and how long. You get the interest for each month, the total to repay, and what to pay in every month.</p>
+
+  <div class="grid">
+    <form class="panel" id="form" autocomplete="off" aria-label="Loan details">
+      <div>
+        <label class="lbl" for="amount">Amount borrowed (₹)</label>
+        <input id="amount" type="number" inputmode="decimal" min="0" step="any" value="100000">
+        <p class="hint" id="amountShow"></p>
+      </div>
+
+      <div>
+        <label class="lbl" for="rate">Interest rate (%)</label>
+        <div class="row rate">
+          <input id="rate" type="number" inputmode="decimal" min="0" step="any" value="2">
+          <select id="rateUnit" aria-label="Rate period">
+            <option value="month" selected>per month</option>
+            <option value="year">per year</option>
+          </select>
+        </div>
+        <p class="hint" id="rateHint"></p>
+      </div>
+
+      <div>
+        <span class="lbl" id="durLbl">For how long</span>
+        <div class="row" role="group" aria-labelledby="durLbl">
+          <div>
+            <input id="years" type="number" inputmode="numeric" min="0" step="1" value="1" aria-label="Years">
+            <p class="hint">Years</p>
+          </div>
+          <div>
+            <input id="months" type="number" inputmode="numeric" min="0" step="1" value="0" aria-label="Months">
+            <p class="hint">Months</p>
+          </div>
+        </div>
+      </div>
+
+      <fieldset>
+        <legend class="lbl">How it is paid back</legend>
+        <label class="opt" for="mInterest">
+          <input type="radio" name="mode" id="mInterest" value="interest" checked>
+          <div><b>Interest every month, amount back at the end</b><span>Pay only the interest each month. The full amount goes back in the last month.</span></div>
+        </label>
+        <label class="opt" for="mFlat">
+          <input type="radio" name="mode" id="mFlat" value="flat">
+          <div><b>Same payment every month (flat)</b><span>Interest is always on the full amount. The amount is split evenly across the months.</span></div>
+        </label>
+        <label class="opt" for="mEmi">
+          <input type="radio" name="mode" id="mEmi" value="emi">
+          <div><b>Same payment every month (EMI)</b><span>Interest is only on what is still owed, like a bank loan.</span></div>
+        </label>
+      </fieldset>
+
+      <div>
+        <span class="lbl" id="exLbl">Extra payment (optional)</span>
+        <div class="row" role="group" aria-labelledby="exLbl">
+          <div>
+            <input id="extraAmount" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 20000" aria-label="Extra amount in rupees">
+            <p class="hint">Extra amount (₹)</p>
+          </div>
+          <div>
+            <input id="extraMonth" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 4" aria-label="Month number of the extra payment">
+            <p class="hint">Paid in month no.</p>
+          </div>
+        </div>
+        <p class="hint" id="extraHint"></p>
+        <div id="afterBox" class="field-gap" hidden>
+          <label class="lbl" for="afterExtra">After the extra payment</label>
+          <select id="afterExtra">
+            <option value="shorter" selected>Keep the same payment, finish earlier</option>
+            <option value="lower">Lower the payment, same end month</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="lbl" for="startDate">Money given on</label>
+        <input id="startDate" type="date">
+        <p class="hint">Used to show the due date of each payment.</p>
+      </div>
+
+      <div class="savebox">
+        <label class="lbl" for="saveName">Save this loan</label>
+        <div class="saverow">
+          <input id="saveName" type="text" maxlength="60" placeholder="Name, e.g. Ramesh">
+          <button type="button" class="btn" id="saveBtn">Save</button>
+        </div>
+        <p class="status" id="saveMsg" role="status"></p>
+      </div>
+
+      <p class="sample">These are sample values. Change any of them and the numbers update.</p>
+    </form>
+
+    <section class="results" aria-live="polite">
+      <div id="out"></div>
+    </section>
+
+    <section class="panel" id="savedPanel" aria-labelledby="savedH">
+      <div>
+        <h2 id="savedH">Saved on this device</h2>
+        <p class="hint">Kept in this browser only. Clearing the browser's site data removes them.</p>
+      </div>
+      <div id="savedList"></div>
+
+      <details class="backup" id="backupBox">
+        <summary>Backup and restore</summary>
+        <div class="bk-body">
+          <p class="hint">Keep a copy of your saved loans to move them to another device or to restore them later.</p>
+          <div class="bk-row">
+            <button type="button" class="btn small" id="copyBackup">Copy backup</button>
+            <button type="button" class="btn small ghost" id="downloadBackup">Download file</button>
+          </div>
+          <textarea id="backupText" rows="5" readonly hidden aria-label="Backup text"></textarea>
+
+          <label class="lbl field-gap" for="importFile">Restore from a backup file</label>
+          <input id="importFile" type="file" accept=".json,application/json">
+          <label class="lbl field-gap" for="importText">Or paste the backup text</label>
+          <textarea id="importText" rows="4" placeholder="Paste the backup text here"></textarea>
+          <div class="bk-row">
+            <button type="button" class="btn small" id="importBtn">Import</button>
+          </div>
+          <p class="hint">Loans with the same name as one already saved are replaced by the backup version.</p>
+          <p class="status" id="backupMsg" role="status"></p>
+        </div>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var nf0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+  var nf2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nfp = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 });
+  function rupee(n) {
+    return '₹' + (Math.abs(n - Math.round(n)) < 0.005 ? nf0.format(Math.round(n)) : nf2.format(n));
+  }
+  function parseDate(s) {
+    var p = (s || '').split('-').map(Number);
+    return p.length === 3 && p[0] ? { y: p[0], m: p[1] - 1, d: p[2] } : null;
+  }
+  function dueDate(s, i) {
+    var dim = new Date(s.y, s.m + i + 1, 0).getDate();
+    var d = new Date(s.y, s.m + i, Math.min(s.d, dim));
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+  function durationText(n) {
+    var y = Math.floor(n / 12), m = n % 12, parts = [];
+    if (y) parts.push(plural(y, 'year'));
+    if (m) parts.push(plural(m, 'month'));
+    return parts.join(' ');
+  }
+
+  // default start date = today (viewer's local date)
+  (function () {
+    var t = new Date();
+    var mm = String(t.getMonth() + 1).padStart(2, '0');
+    var dd = String(t.getDate()).padStart(2, '0');
+    $('startDate').value = t.getFullYear() + '-' + mm + '-' + dd;
+  })();
+
+  // ex = { month, amount, after } or null. The extra amount is paid on top of that month's normal payment and goes to principal.
+  function schedule(P, r, n, mode, ex) {
+    function r2(x) { return Math.round(x * 100) / 100; } // whole paise, so every row adds up to the totals
+    P = r2(P);
+    var rows = [], bal = P, capped = false, i;
+    var k = ex ? ex.month : 0;
+    function emiFor(B, m) {
+      return r === 0 ? B / m : B * r * Math.pow(1 + r, m) / (Math.pow(1 + r, m) - 1);
+    }
+    var emi = mode === 'emi' ? r2(emiFor(P, n)) : 0;
+    var flatBase = P, flatPart = P / n;
+    for (i = 1; i <= n && bal > 0.004; i++) {
+      var last = (i === n), interest, principal, extra = 0;
+      if (mode === 'interest') {
+        interest = r2(bal * r);
+        principal = last ? bal : 0;
+      } else if (mode === 'flat') {
+        interest = r2(flatBase * r);
+        principal = last ? bal : r2(Math.min(flatPart, bal));
+      } else {
+        interest = r2(bal * r);
+        principal = last ? bal : r2(Math.min(emi - interest, bal));
+      }
+      if (ex && i === k && !last) {
+        extra = Math.min(r2(ex.amount), r2(bal - principal));
+        if (extra < r2(ex.amount) - 0.004) capped = true;
+      }
+      bal = r2(bal - principal - extra);
+      if (bal < 0.004) bal = 0;
+      rows.push({ i: i, pay: r2(interest + principal + extra), interest: interest, principal: principal, extra: extra, bal: bal });
+      if (extra > 0 && bal > 0) {
+        if (mode === 'flat') { flatBase = Math.max(0, flatBase - extra); flatPart = bal / (n - i); }
+        if (mode === 'emi' && ex.after === 'lower') emi = r2(emiFor(bal, n - i));
+      }
+    }
+    return { rows: rows, capped: capped };
+  }
+
+  function render() {
+    var P = parseFloat($('amount').value);
+    var rIn = parseFloat($('rate').value);
+    var y = Math.max(0, Math.floor(parseFloat($('years').value) || 0));
+    var m = Math.max(0, Math.floor(parseFloat($('months').value) || 0));
+    var n = y * 12 + m;
+    var unit = $('rateUnit').value;
+    var mode = document.querySelector('input[name=mode]:checked').value;
+    var out = $('out');
+    var XHINT = 'Leave the amount empty if there is no extra payment.';
+    $('afterBox').hidden = mode !== 'emi';
+    $('extraHint').textContent = XHINT;
+
+    $('amountShow').innerHTML = P > 0 ? 'That is <strong>' + rupee(P) + '</strong>' : '';
+
+    if (rIn >= 0) {
+      $('rateHint').innerHTML = unit === 'month'
+        ? '₹' + nfp.format(rIn) + ' on every ₹100, every month. That is <strong>' + nfp.format(rIn * 12) + '% a year</strong>.'
+        : nfp.format(rIn) + '% a year. That is <strong>₹' + nfp.format(rIn / 12) + ' on every ₹100 each month</strong>.';
+    } else {
+      $('rateHint').textContent = '';
+    }
+
+    if (!(P > 0) || !(rIn >= 0) || !(n > 0) || n > 600) {
+      out.innerHTML = '<div class="msg">' + (n > 600
+        ? 'Keep the duration under 50 years (600 months).'
+        : 'Enter an amount, a rate and a duration of at least 1 month to see the numbers.') + '</div>';
+      return;
+    }
+
+    var rm = unit === 'year' ? rIn / 12 / 100 : rIn / 100;
+    var exAmt = parseFloat($('extraAmount').value);
+    var exMonth = Math.floor(parseFloat($('extraMonth').value));
+    var ex = null, exMsg = '';
+    if (exAmt > 0) {
+      if (exMonth >= 1 && exMonth <= n - 1) {
+        ex = { month: exMonth, amount: exAmt, after: $('afterExtra').value };
+      } else {
+        exMsg = n < 2 ? 'An extra payment needs a loan of at least 2 months.' : 'Pick a month from 1 to ' + (n - 1) + '.';
+      }
+    }
+    var sch = schedule(P, rm, n, mode, ex);
+    var rows = sch.rows;
+    var k = ex ? ex.month : 0;
+    var exRow = null;
+    rows.forEach(function (r) { if (r.extra > 0 && !exRow) exRow = r; });
+    var totalPay = 0, totalInt = 0, totalPrin = 0, totalExtra = 0;
+    rows.forEach(function (r) { totalPay += r.pay; totalInt += r.interest; totalPrin += r.principal; totalExtra += r.extra; });
+    var baseInt = 0;
+    if (exRow) schedule(P, rm, n, mode, null).rows.forEach(function (r) { baseInt += r.interest; });
+    $('extraHint').textContent = exMsg || (sch.capped && exRow ? 'That is more than is owed in month ' + k + ', so ' + rupee(exRow.extra) + ' was used.' : XHINT);
+    var L = rows.length;
+
+    var rateText = unit === 'month'
+      ? nfp.format(rIn) + '% per month (' + nfp.format(rIn * 12) + '% a year)'
+      : nfp.format(rIn) + '% per year (' + nfp.format(rIn / 12) + '% a month)';
+
+    var nxt = exRow ? rows[k] : null; // the row for month k+1, if the loan goes on
+    var intNote = mode === 'emi' ? 'First month. It drops as you pay back.' : 'The same every month.';
+    if (nxt && mode !== 'emi') intNote = 'Until month ' + k + ', then ' + rupee(nxt.interest) + '.';
+    var tail = L > 1
+      ? 'Last month: ' + rupee(rows[L - 1].pay) + ', which includes the ' + rupee(rows[L - 1].principal + rows[L - 1].extra) + ' still owed.'
+      : 'One payment, with the amount borrowed included.';
+    var payNote = mode === 'interest' ? tail : 'The same every month.';
+    if (nxt && k + 1 < L && Math.abs(nxt.pay - rows[0].pay) > 0.005) {
+      var lead = 'Until month ' + k + ' (plus the extra), then ' + rupee(nxt.pay) + '.';
+      payNote = mode === 'interest' ? lead + ' ' + tail : lead;
+    } else if (exRow && mode === 'emi' && L < n) {
+      payNote = 'The same every month, ending in month ' + L + '.';
+    }
+
+    var start = parseDate($('startDate').value);
+    var hasEx = !!exRow;
+    var body = rows.map(function (r) {
+      return '<tr' + (r.extra > 0 ? ' class="xr"' : '') + '><td>' + r.i + '</td><td>' + (start ? dueDate(start, r.i) : '–') + '</td>' +
+        '<td class="pay">' + nf2.format(r.pay) + '</td><td>' + nf2.format(r.interest) + '</td>' +
+        '<td>' + nf2.format(r.principal) + '</td>' +
+        (hasEx ? '<td>' + (r.extra > 0 ? nf2.format(r.extra) : '–') + '</td>' : '') +
+        '<td>' + nf2.format(r.bal) + '</td></tr>';
+    }).join('');
+    var head = '<thead><tr><th>Month</th><th>Due date</th><th>Pay (₹)</th><th>Interest (₹)</th><th>Principal (₹)</th>' +
+      (hasEx ? '<th>Extra (₹)</th>' : '') + '<th>Still owed (₹)</th></tr></thead>';
+    var foot = '<tfoot><tr><td colspan="2">Total</td><td>' + nf2.format(totalPay) + '</td><td>' + nf2.format(totalInt) + '</td><td>' +
+      nf2.format(totalPrin) + '</td>' + (hasEx ? '<td>' + nf2.format(totalExtra) + '</td>' : '') + '<td></td></tr></tfoot>';
+    var gainHtml = '';
+    if (hasEx) {
+      var saved = Math.max(0, baseInt - totalInt);
+      gainHtml = '<div class="gain"><b>' + rupee(saved) + ' saved</b> in interest. The extra ' + rupee(exRow.extra) + ' in month ' + k +
+        ' brings the total interest down from ' + rupee(baseInt) + ' to ' + rupee(totalInt) + '.' +
+        (L < n ? ' The loan ends in month ' + L + ', ' + plural(n - L, 'month') + ' early.' : '') + '</div>';
+    }
+
+    out.innerHTML =
+      '<p class="summary">' + rupee(P) + ' for ' + durationText(n) + ' at ' + rateText + '.</p>' +
+      '<div class="hero"><div class="k">Total to repay</div><div class="v">' + rupee(totalPay) + '</div></div>' +
+      '<div class="facts">' +
+        '<div class="fact"><div class="k">Interest per month</div><div class="v">' + rupee(rows[0].interest) + '</div><div class="n">' + intNote + '</div></div>' +
+        '<div class="fact"><div class="k">Pay each month</div><div class="v">' + rupee(rows[0].pay) + '</div><div class="n">' + payNote + '</div></div>' +
+        '<div class="fact"><div class="k">Total interest</div><div class="v">' + rupee(totalInt) + '</div><div class="n">' + nfp.format(totalInt / P * 100) + '% of the amount borrowed.</div></div>' +
+      '</div>' +
+      gainHtml +
+      '<h2>What to pay, month by month</h2>' +
+      '<div class="tablewrap" tabindex="0" role="region" aria-label="Month by month payments"><table>' +
+        head +
+        '<tbody>' + body + '</tbody>' +
+        foot +
+      '</table></div>';
+  }
+
+  // ---- Saved loans, kept in the browser's localStorage ----
+  var KEY = 'interestLedger.loans.v1';
+  var storageOK = true;
+  var armed = null, armTimer = null, flashTimer = null;
+  try {
+    localStorage.setItem('interestLedger.probe', '1');
+    localStorage.removeItem('interestLedger.probe');
+  } catch (e) { storageOK = false; }
+
+  function readLoans() {
+    if (!storageOK) return [];
+    try {
+      var a = JSON.parse(localStorage.getItem(KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  function writeLoans(list) {
+    try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+  function currentValues() {
+    return {
+      amount: $('amount').value,
+      rate: $('rate').value,
+      unit: $('rateUnit').value,
+      years: $('years').value,
+      months: $('months').value,
+      mode: document.querySelector('input[name=mode]:checked').value,
+      extraAmount: $('extraAmount').value,
+      extraMonth: $('extraMonth').value,
+      afterExtra: $('afterExtra').value,
+      start: $('startDate').value
+    };
+  }
+  function totalMonths(v) {
+    return Math.max(0, Math.floor(parseFloat(v.years) || 0)) * 12 + Math.max(0, Math.floor(parseFloat(v.months) || 0));
+  }
+  function unitText(u) { return u === 'year' ? 'per year' : 'per month'; }
+  function loanSummary(l) {
+    return rupee(parseFloat(l.amount)) + ' · ' + nfp.format(parseFloat(l.rate)) + '% ' + unitText(l.unit) + ' · ' + durationText(totalMonths(l)) +
+      (parseFloat(l.extraAmount) > 0 && l.extraMonth ? ' · extra ' + rupee(parseFloat(l.extraAmount)) + ' in month ' + l.extraMonth : '');
+  }
+  function flash(msg) {
+    var el = $('saveMsg');
+    el.textContent = msg;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { el.textContent = ''; }, 4500);
+  }
+  function note(t) {
+    var p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = t;
+    return p;
+  }
+
+  function saveLoan() {
+    if (!storageOK) { flash('Saving does not work in this browser.'); return; }
+    var v = currentValues();
+    var P = parseFloat(v.amount), r = parseFloat(v.rate), n = totalMonths(v);
+    if (!(P > 0) || !(r >= 0) || !(n > 0) || n > 600) {
+      flash('Enter a valid amount, rate and duration first.');
+      return;
+    }
+    var name = $('saveName').value.trim();
+    if (!name) name = rupee(P) + ' at ' + nfp.format(r) + '% ' + unitText(v.unit);
+    var list = readLoans();
+    var found = -1;
+    list.forEach(function (l, i) { if (String(l.name).toLowerCase() === name.toLowerCase()) found = i; });
+    var item = {
+      id: found >= 0 ? list[found].id : String(Date.now()),
+      name: name,
+      amount: v.amount, rate: v.rate, unit: v.unit,
+      years: v.years, months: v.months, mode: v.mode, start: v.start,
+      extraAmount: v.extraAmount, extraMonth: v.extraMonth, afterExtra: v.afterExtra,
+      savedAt: Date.now()
+    };
+    if (found >= 0) list.splice(found, 1);
+    list.unshift(item);
+    if (writeLoans(list)) {
+      flash((found >= 0 ? 'Updated "' : 'Saved "') + name + '".');
+      $('saveName').value = '';
+    } else {
+      flash('Could not save. This browser may be blocking local storage.');
+    }
+    renderSaved();
+  }
+
+  function openLoan(id) {
+    var l = readLoans().filter(function (x) { return x.id === id; })[0];
+    if (!l) return;
+    $('amount').value = l.amount;
+    $('rate').value = l.rate;
+    $('rateUnit').value = l.unit === 'year' ? 'year' : 'month';
+    $('years').value = l.years;
+    $('months').value = l.months;
+    var radio = document.querySelector('input[name=mode][value="' + l.mode + '"]');
+    if (radio) radio.checked = true;
+    if (l.start) $('startDate').value = l.start;
+    $('extraAmount').value = l.extraAmount || '';
+    $('extraMonth').value = l.extraMonth || '';
+    $('afterExtra').value = l.afterExtra === 'lower' ? 'lower' : 'shorter';
+    $('saveName').value = l.name;
+    render();
+    flash('Opened "' + l.name + '".');
+    if (window.matchMedia('(max-width: 820px)').matches) $('out').scrollIntoView({ block: 'start' });
+  }
+
+  function renderSaved() {
+    var box = $('savedList');
+    box.innerHTML = '';
+    $('saveBtn').disabled = !storageOK;
+    $('importBtn').disabled = !storageOK;
+    $('importFile').disabled = !storageOK;
+    if (!storageOK) {
+      box.appendChild(note('Saving does not work in this browser, for example in a private window.'));
+      return;
+    }
+    var list = readLoans();
+    if (!list.length) {
+      box.appendChild(note('Nothing saved yet. Fill in the details, give it a name and press Save.'));
+      return;
+    }
+    var ul = document.createElement('ul');
+    ul.className = 'saved';
+    list.forEach(function (l) {
+      var li = document.createElement('li');
+      var info = document.createElement('div');
+      info.className = 'info';
+      var s = document.createElement('strong');
+      s.textContent = l.name;
+      var sp = document.createElement('span');
+      sp.textContent = loanSummary(l);
+      info.appendChild(s);
+      info.appendChild(sp);
+
+      var btns = document.createElement('div');
+      btns.className = 'btns';
+      var o = document.createElement('button');
+      o.type = 'button';
+      o.className = 'btn small';
+      o.textContent = 'Open';
+      o.setAttribute('data-act', 'open');
+      o.setAttribute('data-id', l.id);
+      o.setAttribute('aria-label', 'Open ' + l.name);
+      var d = document.createElement('button');
+      d.type = 'button';
+      d.className = 'btn small ghost' + (armed === l.id ? ' armed' : '');
+      d.textContent = armed === l.id ? 'Sure?' : 'Delete';
+      if (armed !== l.id) d.setAttribute('aria-label', 'Delete ' + l.name);
+      d.setAttribute('data-act', 'delete');
+      d.setAttribute('data-id', l.id);
+      btns.appendChild(o);
+      btns.appendChild(d);
+
+      li.appendChild(info);
+      li.appendChild(btns);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    if (armed) {
+      var f = box.querySelector('button.armed');
+      if (f) f.focus();
+    }
+  }
+
+  // ---- Backup and restore ----
+  var backupTimer = null;
+  function bflash(msg) {
+    var el = $('backupMsg');
+    el.textContent = msg;
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(function () { el.textContent = ''; }, 7000);
+  }
+  function backupJson() {
+    return JSON.stringify({ app: 'interest-ledger', version: 1, exportedAt: new Date().toISOString(), loans: readLoans() }, null, 2);
+  }
+  function copyBackup() {
+    if (!readLoans().length) { bflash('Nothing to back up yet. Save a loan first.'); return; }
+    var txt = backupJson();
+    function showText() {
+      var t = $('backupText');
+      t.hidden = false;
+      t.value = txt;
+      t.focus();
+      t.select();
+      bflash('Copying was blocked here. Select the text below and copy it.');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () {
+        bflash('Backup copied. Paste it into a note or a message to keep it.');
+      }, showText);
+    } else {
+      showText();
+    }
+  }
+  function downloadBackup() {
+    if (!readLoans().length) { bflash('Nothing to back up yet. Save a loan first.'); return; }
+    try {
+      var t = new Date();
+      var stamp = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+      var url = URL.createObjectURL(new Blob([backupJson()], { type: 'application/json' }));
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'interest-ledger-backup-' + stamp + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      bflash('Download started. If no file appears, use Copy backup instead.');
+    } catch (e) {
+      bflash('Download is not available here. Use Copy backup instead.');
+    }
+  }
+  function cleanLoan(x) {
+    if (!x || typeof x !== 'object') return null;
+    var amount = parseFloat(x.amount), rate = parseFloat(x.rate);
+    var yrs = Math.max(0, Math.floor(parseFloat(x.years) || 0));
+    var mos = Math.max(0, Math.floor(parseFloat(x.months) || 0));
+    var total = yrs * 12 + mos;
+    if (!(amount > 0) || !(rate >= 0) || !(total > 0) || total > 600) return null;
+    var unit = x.unit === 'year' ? 'year' : 'month';
+    var name = String(x.name == null ? '' : x.name).trim().slice(0, 60);
+    if (!name) name = rupee(amount) + ' at ' + nfp.format(rate) + '% ' + unitText(unit);
+    var exAmt = parseFloat(x.extraAmount), exMo = Math.floor(parseFloat(x.extraMonth));
+    var hasEx = exAmt > 0 && exMo >= 1;
+    return {
+      name: name,
+      amount: String(amount), rate: String(rate), unit: unit,
+      years: String(yrs), months: String(mos),
+      mode: ['interest', 'flat', 'emi'].indexOf(x.mode) >= 0 ? x.mode : 'interest',
+      start: /^\d{4}-\d{2}-\d{2}$/.test(String(x.start || '')) ? String(x.start) : '',
+      extraAmount: hasEx ? String(exAmt) : '',
+      extraMonth: hasEx ? String(exMo) : '',
+      afterExtra: x.afterExtra === 'lower' ? 'lower' : 'shorter'
+    };
+  }
+  function importBackup(text) {
+    var bad = 'That is not a valid backup. Paste the whole backup text, or choose the backup file.';
+    if (!storageOK) { bflash('Saving does not work in this browser.'); return false; }
+    var data;
+    try { data = JSON.parse(text); } catch (e) { bflash(bad); return false; }
+    var arr = Array.isArray(data) ? data : (data && Array.isArray(data.loans) ? data.loans : null);
+    if (!arr) { bflash(bad); return false; }
+    var list = readLoans(), added = 0, replaced = 0, skipped = 0;
+    arr.slice(0, 500).forEach(function (x, idx) {
+      var c = cleanLoan(x);
+      if (!c) { skipped++; return; }
+      var at = -1;
+      list.forEach(function (l, i) { if (String(l.name).toLowerCase() === c.name.toLowerCase()) at = i; });
+      c.savedAt = Date.now();
+      if (at >= 0) { c.id = list[at].id; list[at] = c; replaced++; }
+      else { c.id = String(Date.now()) + '-' + idx; list.push(c); added++; }
+    });
+    if (!added && !replaced) {
+      bflash('No loans were found in that backup.' + (skipped ? ' ' + skipped + (skipped === 1 ? ' entry' : ' entries') + ' could not be read.' : ''));
+      return false;
+    }
+    if (!writeLoans(list)) { bflash('Could not save. This browser may be blocking local storage.'); return false; }
+    renderSaved();
+    var parts = [];
+    if (added) parts.push(plural(added, 'new loan') + ' added');
+    if (replaced) parts.push(plural(replaced, 'loan') + ' replaced');
+    if (skipped) parts.push(skipped + (skipped === 1 ? ' entry' : ' entries') + ' could not be read');
+    bflash('Imported: ' + parts.join(', ') + '.');
+    return true;
+  }
+  $('copyBackup').addEventListener('click', copyBackup);
+  $('downloadBackup').addEventListener('click', downloadBackup);
+  $('importBtn').addEventListener('click', function () {
+    var t = $('importText').value.trim();
+    if (!t) { bflash('Paste the backup text first, or choose a backup file.'); return; }
+    if (importBackup(t)) $('importText').value = '';
+  });
+  $('importFile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { bflash('That file is too large to be a backup.'); this.value = ''; return; }
+    var rd = new FileReader();
+    var input = this;
+    rd.onload = function () { importBackup(String(rd.result)); input.value = ''; };
+    rd.onerror = function () { bflash('Could not read that file.'); };
+    rd.readAsText(f);
+  });
+
+  $('savedList').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button[data-act]') : null;
+    if (!b) return;
+    var id = b.getAttribute('data-id');
+    if (b.getAttribute('data-act') === 'open') {
+      openLoan(id);
+      return;
+    }
+    if (armed === id) {
+      clearTimeout(armTimer);
+      armed = null;
+      writeLoans(readLoans().filter(function (x) { return x.id !== id; }));
+      flash('Deleted.');
+    } else {
+      armed = id;
+      clearTimeout(armTimer);
+      armTimer = setTimeout(function () { armed = null; renderSaved(); }, 3500);
+    }
+    renderSaved();
+  });
+  $('saveBtn').addEventListener('click', saveLoan);
+  $('saveName').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveLoan(); }
+  });
+  window.addEventListener('storage', function (e) { if (e.key === KEY) renderSaved(); });
+
+  function onFormChange(e) {
+    if (e.target && e.target.id === 'saveName') return;
+    render();
+  }
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.id === 'saveName') saveLoan();
+  });
+  $('form').addEventListener('input', onFormChange);
+  $('form').addEventListener('change', onFormChange);
+  render();
+  renderSaved();
+})();
+</script>
+</body>
+</html>
